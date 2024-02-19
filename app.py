@@ -3,15 +3,37 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from datetime import datetime
+import requests
 
-st.set_page_config(page_title='Birthday Annalysis', page_icon=':birthday_cake:', layout='wide')
-st.title("How Rare is Your Birthday")
 
 ### DEFINING DATAFRAME ###
+@st.cache_data
 def load_data(): 
+    url = "https://api.data.gov.my/data-catalogue?id=births&limit"
+    # response_json = requests.get(url=url).json()
+    
+    response = requests.get(url)
+    if response.status_code == 200:
+        
+        df = pd.DataFrame(response.json())
+        df['birthdate'] = pd.to_datetime(df['date'])
+        df['year'] = df['birthdate'].dt.year
+        df['month'] = df['birthdate'].dt.month
+        df['date'] = df['birthdate'].dt.day
+        df = df[['birthdate', 'year', 'month', 'date', 'births']]
+        # st.write(df)
+        return df
+    else:
+        print("Failed to fetch data from the API.")
+        return None
+    
+    
+def load_dataParquet(): 
     URL_DATA = 'https://storage.data.gov.my/demography/births.parquet'
+
     df = pd.read_parquet(URL_DATA)
-    if 'date' in df.columns: df['date'] = pd.to_datetime(df['date'], format='%Y-%m-%d')
+    if 'date' in df.columns: df['date'] = pd.to_datetime(df['date'])
+    
     df = df.drop('state', axis=1 )
     df = df.rename(columns={'date': 'birthdate'})
     df['year'] = df['birthdate'].dt.year
@@ -19,7 +41,7 @@ def load_data():
     df['date'] = df['birthdate'].dt.day
     df = df[['birthdate', 'year', 'month', 'date', 'births']]
     return df
-    
+
 
 ### DEFINING GENERATION ###
 generation_ranges = {
@@ -50,7 +72,6 @@ def numOfdays(year):
         return 366
     else:
         return 365
-
 def currentAge(date):
     
     age = datetime.now() - datetime.strptime(str(date), '%Y-%m-%d')
@@ -60,8 +81,6 @@ def currentAge(date):
     remaining_days = remaining_days % 30
     days = remaining_days
     st.write("You are {} years, {} months, {} days old".format(years, months, days))
-    
-
 def bdayRank(date):
     inputYr = date.year
     df_yr = get_range(inputYr, inputYr)
@@ -75,8 +94,6 @@ def bdayRank(date):
     <b style="font-size:larger">{ranking[0]}{"th" if 11 <= ranking[0] <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(ranking[0] % 10, "th")}</b> 
     most popular birthday out of the {numOfdays(inputYr)} potential dates'''
     st.markdown(txt, unsafe_allow_html=True)
-    
-    st.write(' dd MM is ')
  
 ### MONTH NAMES DICTIONARY ###   
 month_names = {
@@ -115,6 +132,13 @@ def commonBday(start, end, N):
     ax.set_ylabel('Birthday Date')
     st.pyplot(fig)
     
+def commonBdayS(start, end, N):
+    gen = get_range(start, end)
+    birthdates = gen.sort_values(by='births', ascending=False).head(N).reset_index(drop=True)
+    fig = plt.barh(birthdates['date'].astype(str) + ' ' + birthdates['month'].map(month_names), birthdates['births'], color='purple')
+    st.plotly_chart(fig, theme="streamlit")
+
+ 
 ### RAREST BIRTHDAY ###
 def rareBday(start, end, N):
     gen = get_range(start, end)
@@ -136,8 +160,6 @@ def rareBday(start, end, N):
     ax.set_ylabel('Birthday Date')
     st.pyplot(fig)
     
-
-
 ### METHOD CREATING HEATMAP ###
 def generate_heatmap(start, end):
     # gen = get_generation(genName)
@@ -156,17 +178,25 @@ def generate_heatmap(start, end):
     ax.set_ylabel('Month')
     st.pyplot(fig)
     
+### PAGE ##
+st.set_page_config(page_title='Birthday Annalysis', page_icon=':birthday_cake:', layout='wide')
+st.title("How Rare is Your Birthday")
 
 st.subheader('Birthday Rank')
-birthday = st.date_input("Your birthday")
+min_date = datetime(1920, 1, 1).date()  # Example: January 1, 1920
+max_date = datetime(2022, 12, 31).date()  # Example: December 31, 2022
+birthday = st.date_input("Your birthday", value=max_date, min_value=min_date, max_value=max_date)
+
 tabA, tabB, tabC = st.tabs(["Summary", "Popular Birthday Date", "Rarest Birthday Date"])
 with tabA:
     bdayRank(birthday)
+
 
 with tabB:
     inputYr = birthday.year
     st.write('The top most common birthdays in ', inputYr,  ' are:')
     commonBday(inputYr, inputYr, 10)
+    # commonBdayS(inputYr, inputYr, 10)
     
 with tabC:
     inputYr = birthday.year
@@ -174,6 +204,7 @@ with tabC:
     rareBday(inputYr, inputYr, 10)
 
 
+st.divider()
 st.subheader('Birthday HeatMap')
 tab1, tab2 = st.tabs(["Generations", "Custom Range"])
 
