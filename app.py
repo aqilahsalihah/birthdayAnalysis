@@ -27,7 +27,7 @@ def load_data():
         print("Failed to fetch data from the API.")
         return None
     
-    
+@st.cache_data    
 def load_dataParquet(): 
     URL_DATA = 'https://storage.data.gov.my/demography/births.parquet'
 
